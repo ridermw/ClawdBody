@@ -1,5 +1,6 @@
 [build]
 builder = "nixpacks"
+# Use npm install instead of npm ci to avoid lock file sync issues
 buildCommand = "npm install && npx prisma generate && npm run build"
 
 [deploy]
@@ -14,3 +15,5 @@ restartPolicyMaxRetries = 3
 [build.nixpacks]
 # Use Node.js 20 (required for AWS SDK and E2B packages)
 nixPackages = ["nodejs_20", "npm-10_x", "openssl"]
+# Override the install phase to use npm install instead of npm ci
+installCmd = "npm install"
