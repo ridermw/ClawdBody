@@ -1,24 +1,38 @@
-# Samantha - Autonomous AI Agent
+# ClawdBody - 1-Click ClawdBot Deployment
 
-Samantha is an autonomous AI agent with **persistent memory**, **intelligent reasoning**, and the ability to **act** in the real world.
+https://clawdbody.com/
+
+ClawdBody is a 1-click deployment platform for ClawdBot that runs 24/7 on cloud VMs, automating your life and business. ClawdBot is an autonomous AI agent with **persistent memory**, **intelligent reasoning**, and the ability to **act** in the real world.
+
+## Features
+
+- 🚀 **1-Click Deployment** - Deploy ClawdBot to cloud VMs in minutes
+- ☁️ **Multi-Provider Support** - Works with Orgo, AWS, E2B, and more
+- 📧 **Email Integration** - ClawdBot can send and reply to emails via Gmail
+- 📅 **Calendar Management** - Create, update, and delete calendar events
+- 🖥️ **Web Terminal** - Built-in terminal for real-time interaction
+- 🤖 **Telegram Bot** - Optional Telegram integration for mobile access
+- 💾 **Persistent Memory** - ClawdBot remembers context across sessions
+- 🔒 **Secure** - OAuth-based integrations with encrypted token storage
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         ORGO VM                                  │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │              OBSIDIAN VAULT (GitHub Sync)               │    │
-│  │  ├── tasks.md          ← P0 Priority Queue              │    │
-│  │  ├── completed_tasks/  ← Archive                        │    │
-│  │  ├── context/          ← Agent Memory                   │    │
-│  │  └── integrations/     ← App Configs                    │    │
-│  └─────────────────────────────────────────────────────────┘    │
+│                       Cloud VM (Orgo/AWS/E2B)                    │
 │                                                                  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐    │
-│  │ Claude   │  │ Browser  │  │ Orgo API │  │ Ralph Wiggum │    │
-│  │ Code     │  │ Use      │  │ & Bash   │  │ Long Tasks   │    │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────────┘    │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                     ClawdBot                              │   │
+│  │  ┌────────────┐  ┌────────────┐  ┌────────────────────┐  │   │
+│  │  │ Claude API │  │ Browser    │  │ Communication API  │  │   │
+│  │  │ Reasoning  │  │ Automation │  │ Gmail + Calendar   │  │   │
+│  │  └────────────┘  └────────────┘  └────────────────────┘  │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │              ClawdBody Web Interface                      │   │
+│  │  • Web Terminal  • VM Setup  • Integration Management    │   │
+│  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -26,19 +40,11 @@ Samantha is an autonomous AI agent with **persistent memory**, **intelligent rea
 
 | Component | Role | Technology |
 |-----------|------|------------|
-| **Memory** | Persistent knowledge base | Obsidian Vault + GitHub |
-| **Mind** | Reasoning & decision making | Claude Code (terminal-based) |
-| **Hands** | Browser & computer control | Orgo APIs |
-
-### Task Priority System
-
-| Priority | Source | Description |
-|----------|--------|-------------|
-| **P0** | `tasks.md` | Externally provided tasks (urgent) |
-| **P1** | Inferred from vault | High priority inferred tasks |
-| **P2** | Inferred from vault | Lower priority inferred tasks |
-
-Tasks execute right-to-left (P0 → P1 → P2).
+| **ClawdBody** | Deployment & management platform | Next.js, Prisma, PostgreSQL |
+| **ClawdBot** | Autonomous AI agent | Claude API, Python |
+| **VM** | Execution environment | Orgo/AWS/E2B cloud VMs |
+| **Integrations** | Communication & automation | Gmail API, Google Calendar API |
+| **Web Terminal** | Real-time interaction | WebSockets, xterm.js |
 
 ## Setup
 
@@ -52,8 +58,8 @@ Tasks execute right-to-left (P0 → P1 → P2).
 ### 1. Clone and Install
 
 ```bash
-git clone <this-repo>
-cd samantha
+git clone https://github.com/Prakshal-Jain/ClawdBody.git
+cd ClawdBody
 npm install
 ```
 
@@ -119,60 +125,59 @@ Visit `http://localhost:3000` and sign in with Google.
 4. **VM Configuration**:
    - Installs Python and essential tools
    - Installs Anthropic SDK for Claude
-   - Installs Clawdbot for autonomous task execution
+   - Installs ClawdBot for autonomous task execution
+   - Configures communication helper scripts for Gmail/Calendar integration
    - Configures Telegram bot (optional)
 
 ## Integrations
 
-**Note:** Gmail, Calendar, and GitHub integrations are currently unavailable as they require a vault repository. These features will be re-enabled in a future update.
+ClawdBody supports integrations with Gmail, Google Calendar, and GitHub. ClawdBot can use these integrations automatically without additional OAuth setup - it reuses the tokens stored in your database.
 
-**For Other Platforms:**
-Set up a cron job to call:
-```
-POST /api/integrations/gmail/sync
-Authorization: Bearer <CRON_SECRET>
-```
+### Available Integrations
 
-Example cron schedule (every 12 hours):
+- **Gmail** - Send/reply to emails, read messages
+- **Google Calendar** - Create, update, delete calendar events
+- **GitHub** - Repository management (coming soon)
+- **Slack** - Team communication (coming soon)
+
+### Communication API
+
+ClawdBot can use the communication features via a helper script automatically installed on the VM:
+
+**Sending Emails:**
 ```bash
-0 */12 * * * curl -X POST https://your-domain.com/api/integrations/gmail/sync \
-  -H "Authorization: Bearer $CRON_SECRET"
+/home/user/clawd/send_communication.sh send_email \
+  --to "recipient@example.com" \
+  --subject "Subject line" \
+  --body "Email body text"
 ```
 
-**Manual Sync:**
-You can manually trigger a sync by calling:
+**Creating Calendar Events:**
 ```bash
-curl -X POST http://localhost:3000/api/integrations/gmail/sync \
-  -H "Authorization: Bearer <CRON_SECRET>"
+/home/user/clawd/send_communication.sh create_event \
+  --summary "Meeting Title" \
+  --start "2024-01-15T10:00:00Z" \
+  --end "2024-01-15T11:00:00Z" \
+  --description "Meeting description"
 ```
 
-### Email Storage
-
-- Emails are batched into files (50 emails per file)
-- New emails from syncs are stored in `integrations/gmail/new-messages-<timestamp>.md`
-- Sync history is logged in `integrations/gmail/sync-log.md`
+See `CLAWDBOT_COMMUNICATION.md` for complete documentation.
 
 ## After Setup
 
-### Adding Tasks
+### Using ClawdBot
 
-Edit `tasks.md` in your vault repository:
+Once setup is complete, ClawdBot runs 24/7 on your VM, ready to execute tasks. You can:
 
-```markdown
-## Active Tasks
-
-- [ ] Book flight to NYC for March 15
-  - Context: Prefer window seat, direct flights
-  - Deadline: March 10
-
-- [ ] Research best noise-canceling headphones under $300
-  - Context: For daily commute and focus work
-```
+1. **Connect via Terminal** - Use the web-based terminal to interact with ClawdBot
+2. **Connect Gmail/Calendar** - Enable communication capabilities from the Learning Sources page
+3. **Use Telegram** - Interact with ClawdBot via Telegram (if configured)
 
 ### Monitoring
 
-- **VM Console**: View at your Orgo dashboard
-- **Vault Repo**: Check GitHub for synced changes
+- **VM Console**: View at your VM provider's dashboard (Orgo/AWS/E2B)
+- **Web Terminal**: Monitor ClawdBot activity through the built-in terminal
+- **Learning Sources**: Check integration status and manage connections
 
 ## Vercel Deployment
 
@@ -181,7 +186,7 @@ Edit `tasks.md` in your vault repository:
 Since the repository is public, you can deploy directly:
 
 1. Go to [vercel.com/new](https://vercel.com/new)
-2. Import your GitHub repository: `prakshaljain422@gmail.com` → Samantha
+2. Import your GitHub repository: `Prakshal-Jain/ClawdBody`
 3. Vercel will auto-detect Next.js settings
 
 ### 2. Configure Environment Variables
@@ -192,7 +197,7 @@ In Vercel Dashboard → Project Settings → Environment Variables, add:
 |----------|-------------|----------|
 | `DATABASE_URL` | PostgreSQL connection string (pooled, use Vercel Postgres, Supabase, or PlanetScale) | ✅ |
 | `DIRECT_URL` | Direct PostgreSQL connection (non-pooled, for migrations) | ✅ |
-| `NEXTAUTH_URL` | Your Vercel URL (e.g., `https://samantha.vercel.app`) | ✅ |
+| `NEXTAUTH_URL` | Your Vercel URL (e.g., `https://clawdbody.vercel.app`) | ✅ |
 | `NEXTAUTH_SECRET` | Generate with: `openssl rand -base64 32` | ✅ |
 | `GITHUB_CLIENT_ID` | From GitHub OAuth App | ✅ |
 | `GITHUB_CLIENT_SECRET` | From GitHub OAuth App | ✅ |
@@ -200,8 +205,8 @@ In Vercel Dashboard → Project Settings → Environment Variables, add:
 | `GOOGLE_CLIENT_SECRET` | From Google Cloud Console | For Gmail/Calendar |
 | `ORGO_API_KEY` | From Orgo dashboard | For VM integration |
 | `CRON_SECRET` | Generate with: `openssl rand -hex 16` | For cron jobs |
-| `TELEGRAM_BOT_TOKEN` | From BotFather | Optional |
-| `TELEGRAM_USER_ID` | Your Telegram user ID | Optional |
+| `TELEGRAM_BOT_TOKEN` | From BotFather | Optional, for Telegram bot |
+| `TELEGRAM_USER_ID` | Your Telegram user ID | Optional, for Telegram bot |
 
 ### 3. Set Up Production Database
 
@@ -251,9 +256,40 @@ npm start
 
 ## API Reference
 
-### Orgo API
-- [Documentation](https://docs.orgo.ai)
-- Endpoints for VM management, bash execution, screenshots
+### Communication API
+See `CLAWDBOT_COMMUNICATION.md` for detailed documentation on:
+- Sending and replying to emails
+- Creating, updating, and deleting calendar events
+- API endpoint specifications and authentication
+
+### VM Provider APIs
+- **Orgo**: [Documentation](https://docs.orgo.ai)
+- **AWS**: EC2 and SSM for VM management
+- **E2B**: [Documentation](https://e2b.dev/docs)
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+### Development Setup
+
+1. Fork the repository
+2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/ClawdBody.git`
+3. Install dependencies: `npm install`
+4. Set up environment variables (see `.env` section above)
+5. Run development server: `npm run dev`
+
+### Repository
+
+- **GitHub**: [Prakshal-Jain/ClawdBody](https://github.com/Prakshal-Jain/ClawdBody)
+- **Issues**: Report bugs or request features via GitHub Issues
+- **Pull Requests**: Submit PRs for bug fixes or new features
+
+## Support
+
+For questions or issues:
+- Open an issue on [GitHub](https://github.com/Prakshal-Jain/ClawdBody/issues)
+- Check existing documentation in the repository
 
 ## License
 
