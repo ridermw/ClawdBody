@@ -151,10 +151,26 @@ export async function POST(request: NextRequest) {
       (output) => {
         const buffer = sessionOutputBuffers.get(sessionId)
         if (buffer) {
-          buffer.push(JSON.stringify(output))
-          // Keep buffer size manageable (last 1000 outputs)
-          if (buffer.length > 1000) {
-            buffer.shift()
+          const outputStr = JSON.stringify(output)
+          buffer.push(outputStr)
+          
+          // Keep buffer size manageable - limit both count and total size
+          // Remove oldest entries if we exceed limits
+          const MAX_BUFFER_ENTRIES = 500 // Reduced from 1000
+          const MAX_BUFFER_SIZE = 5 * 1024 * 1024 // 5MB total buffer size
+          
+          // Calculate current buffer size
+          let totalSize = buffer.reduce((sum, item) => sum + item.length, 0)
+          
+          // Remove oldest entries if we exceed limits
+          while (
+            (buffer.length > MAX_BUFFER_ENTRIES || totalSize > MAX_BUFFER_SIZE) &&
+            buffer.length > 0
+          ) {
+            const removed = buffer.shift()
+            if (removed) {
+              totalSize -= removed.length
+            }
           }
         }
       },

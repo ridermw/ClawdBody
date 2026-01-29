@@ -135,13 +135,35 @@ export async function GET(request: NextRequest) {
           
           // Check if imageData is a URL (starts with http/https)
           if (typeof imageData === 'string' && (imageData.startsWith('http://') || imageData.startsWith('https://'))) {
-            // It's a URL - fetch the image and convert to base64
+            // Prefer returning URL directly to reduce egress (frontend can fetch it)
+            // Only fetch and convert if explicitly requested
+            const fetchImage = request.nextUrl.searchParams.get('fetch') === 'true'
+            
+            if (!fetchImage) {
+              // Return URL directly - saves egress by letting frontend fetch directly
+              return NextResponse.json({
+                imageUrl: imageData,
+              })
+            }
+            
+            // Only fetch if explicitly requested
             try {
               const imageResponse = await fetch(imageData)
               if (!imageResponse.ok) {
                 throw new Error(`Failed to fetch image from URL: ${imageResponse.status}`)
               }
               const arrayBuffer = await imageResponse.arrayBuffer()
+              
+              // Limit image size to prevent excessive egress (max 2MB)
+              const MAX_IMAGE_SIZE = 2 * 1024 * 1024
+              if (arrayBuffer.byteLength > MAX_IMAGE_SIZE) {
+                // Return URL instead if image is too large
+                return NextResponse.json({
+                  imageUrl: imageData,
+                  warning: 'Image too large, using direct URL',
+                })
+              }
+              
               const buffer = Buffer.from(arrayBuffer)
               const base64 = buffer.toString('base64')
               
@@ -183,6 +205,16 @@ export async function GET(request: NextRequest) {
       } else if (contentType.includes('image/')) {
         // Binary image response - convert to base64
         const arrayBuffer = await response.arrayBuffer()
+        
+        // Limit image size to prevent excessive egress (max 2MB)
+        const MAX_IMAGE_SIZE = 2 * 1024 * 1024
+        if (arrayBuffer.byteLength > MAX_IMAGE_SIZE) {
+          return NextResponse.json(
+            { error: 'Screenshot too large. Please try again or contact support.' },
+            { status: 413 } // Payload Too Large
+          )
+        }
+        
         const buffer = Buffer.from(arrayBuffer)
         const base64 = buffer.toString('base64')
         

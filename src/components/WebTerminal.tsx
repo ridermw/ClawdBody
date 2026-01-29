@@ -181,6 +181,15 @@ export function WebTerminal({
             // Focus the terminal so user can start typing
             xtermRef.current?.focus()
             onReady?.()
+          } else if (output.type === 'batch') {
+            // Handle batched outputs (optimization to reduce egress)
+            if (Array.isArray(output.outputs)) {
+              for (const item of output.outputs) {
+                if (item.data) {
+                  xtermRef.current?.write(item.data)
+                }
+              }
+            }
           } else if (output.data) {
             xtermRef.current?.write(output.data)
           }
