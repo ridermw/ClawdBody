@@ -43,6 +43,13 @@ interface SetupStatus {
   awsPublicIp?: string
   awsRegion?: string
   awsConsoleUrl?: string
+  // Azure-specific fields
+  azureVmId?: string
+  azureVmName?: string
+  azurePublicIp?: string
+  azureRegion?: string
+  azureResourceGroup?: string
+  azurePortalUrl?: string
   // Common fields
   errorMessage?: string
 }
@@ -58,13 +65,13 @@ export function SetupWizard() {
   
   // Check if we have a valid VM identifier for screenshots
   const hasVmIdentifier = setupStatus?.vmCreated && (
-    setupStatus?.orgoComputerId || setupStatus?.awsInstanceId
+    setupStatus?.orgoComputerId || setupStatus?.awsInstanceId || setupStatus?.azureVmId
   )
   
-  // Poll for screenshots if VM is created (Orgo only - AWS doesn't support screenshots)
+  // Poll for screenshots if VM is created (Orgo only - AWS and Azure don't support screenshots)
   useEffect(() => {
-    // Only poll screenshots for Orgo VMs (AWS EC2 doesn't have built-in screenshot API)
-    if (!setupStatus?.orgoComputerId || !setupStatus?.vmCreated || setupStatus?.vmProvider === 'aws') {
+    // Only poll screenshots for Orgo VMs (AWS EC2 and Azure don't have built-in screenshot API)
+    if (!setupStatus?.orgoComputerId || !setupStatus?.vmCreated || setupStatus?.vmProvider === 'aws' || setupStatus?.vmProvider === 'azure') {
       return
     }
 
@@ -729,10 +736,13 @@ function SetupTaskItem({
 function getTerminalText(step: SetupStep, status: SetupStatus | null): string {
   const isAWS = status?.vmProvider === 'aws'
   const isE2B = status?.vmProvider === 'e2b'
-  
+  const isAzure = status?.vmProvider === 'azure'
+
   if (step === 'provisioning') {
     if (isAWS) {
       return `aws ec2 run-instances --region ${status?.awsRegion || 'us-east-1'} --instance-type t3.micro`
+    } else if (isAzure) {
+      return `az vm create --resource-group clawdbot-vms --name ${status?.azureVmName || 'clawdbot-vm'} --image Ubuntu2204`
     } else if (isE2B) {
       return 'e2b sandbox create --template base'
     } else {
@@ -744,8 +754,10 @@ function getTerminalText(step: SetupStep, status: SetupStatus | null): string {
     if (status?.telegramConfigured) return 'nohup /tmp/start-clawdbot.sh &'
     if (status?.clawdbotInstalled) return 'npm install -g clawdbot@latest'
     if (status?.vmCreated) return 'sudo apt-get install -y python3 pip'
-    return isAWS 
+    return isAWS
       ? 'Connecting to EC2 instance via SSH...'
+      : isAzure
+      ? 'Connecting to Azure VM via SSH...'
       : isE2B
       ? 'Initializing E2B sandbox...'
       : 'Waiting for VM to be ready...'

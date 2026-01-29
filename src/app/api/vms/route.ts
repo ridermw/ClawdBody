@@ -30,6 +30,11 @@ export async function GET() {
         awsSecretAccessKey: true,
         awsRegion: true,
         e2bApiKey: true,
+        azureTenantId: true,
+        azureClientId: true,
+        azureClientSecret: true,
+        azureSubscriptionId: true,
+        azureRegion: true,
       },
     })
 
@@ -47,6 +52,8 @@ export async function GET() {
         hasAwsCredentials: !!(setupState?.awsAccessKeyId && setupState?.awsSecretAccessKey),
         awsRegion: setupState?.awsRegion || 'us-east-1',
         hasE2bApiKey: !!setupState?.e2bApiKey,
+        hasAzureCredentials: !!(setupState?.azureTenantId && setupState?.azureClientId && setupState?.azureClientSecret && setupState?.azureSubscriptionId),
+        azureRegion: setupState?.azureRegion || 'eastus',
       },
     })
   } catch (error) {
@@ -70,9 +77,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { 
-      name, 
-      provider, 
+    const {
+      name,
+      provider,
       provisionNow, // If true, provision Orgo VM immediately
       // Orgo specific
       orgoProjectId,
@@ -82,6 +89,9 @@ export async function POST(request: NextRequest) {
       // AWS specific
       awsInstanceType,
       awsRegion,
+      // Azure specific
+      azureVmSize,
+      azureRegion,
       // E2B specific
       e2bTemplateId,
       e2bTimeout,
@@ -91,7 +101,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Name and provider are required' }, { status: 400 })
     }
 
-    if (!['orgo', 'aws', 'flyio', 'e2b'].includes(provider)) {
+    if (!['orgo', 'aws', 'azure', 'flyio', 'e2b'].includes(provider)) {
       return NextResponse.json({ error: 'Invalid provider' }, { status: 400 })
     }
 
@@ -165,6 +175,9 @@ export async function POST(request: NextRequest) {
         // AWS specific
         awsInstanceType,
         awsRegion,
+        // Azure specific
+        azureVmSize,
+        azureRegion,
         // E2B specific
         e2bTemplateId,
         e2bTimeout,

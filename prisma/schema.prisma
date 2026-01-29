@@ -82,6 +82,14 @@ model SetupState {
   // E2B Credentials
   e2bApiKey          String?
 
+  // Azure Credentials (encrypted in production)
+  azureTenantId      String?
+  azureClientId      String?
+  azureClientSecret  String?
+  azureSubscriptionId String?
+  azureRegion        String? @default("eastus")
+  azureVmSize        String? @default("Standard_B2s")
+
   // Orgo VM info
   orgoProjectId   String?
   orgoProjectName String?
@@ -137,6 +145,16 @@ model VM {
   e2bSandboxId    String?
   e2bTemplateId   String?
   e2bTimeout      Int?     @default(3600) // Timeout in seconds
+
+  // Azure specific fields
+  azureVmId           String?
+  azureVmName         String?
+  azureVmSize         String?
+  azureRegion         String?
+  azureResourceGroup  String?
+  azurePublicIp       String?
+  azurePrivateKey     String?
+  azureAdminPassword  String?
 
   // SSH connection info
   sshHost     String?

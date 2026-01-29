@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Loader2, ArrowRight, CheckCircle2, LogOut, X, Key, FolderPlus, AlertCircle, ExternalLink, Globe, Server, Plus, Trash2, Play, Power, ArrowLeft, ExternalLinkIcon, Settings } from 'lucide-react'
 
-type VMProvider = 'orgo' | 'e2b' | 'flyio' | 'aws' | 'railway' | 'digitalocean' | 'hetzner' | 'modal'
+type VMProvider = 'orgo' | 'e2b' | 'flyio' | 'aws' | 'azure' | 'railway' | 'digitalocean' | 'hetzner' | 'modal'
 
 interface VMOption {
   id: VMProvider
@@ -38,6 +38,20 @@ interface AWSInstanceType {
   freeTier?: boolean
 }
 
+interface AzureRegion {
+  id: string
+  name: string
+}
+
+interface AzureVMSize {
+  id: string
+  name: string
+  vcpu: number
+  memory: string
+  priceHour: string
+  recommended?: boolean
+}
+
 interface UserVM {
   id: string
   name: string
@@ -51,6 +65,11 @@ interface UserVM {
   awsInstanceType?: string
   awsRegion?: string
   awsPublicIp?: string
+  azureVmId?: string
+  azureVmSize?: string
+  azureRegion?: string
+  azurePublicIp?: string
+  azureResourceGroup?: string
   createdAt: string
 }
 
@@ -59,6 +78,8 @@ interface Credentials {
   hasAwsCredentials: boolean
   awsRegion: string
   hasE2bApiKey: boolean
+  hasAzureCredentials: boolean
+  azureRegion: string
 }
 
 interface E2BTemplate {
@@ -119,6 +140,14 @@ const vmOptions: VMOption[] = [
     icon: <img src="/logos/aws.png" alt="AWS" className="w-12 h-12 object-contain" />,
     available: true,
     url: 'https://aws.amazon.com',
+  },
+  {
+    id: 'azure',
+    name: 'Azure VM',
+    description: 'Microsoft cloud with enterprise security and hybrid capabilities.',
+    icon: <img src="/logos/azure.svg" alt="Azure" className="w-12 h-12 object-contain" />,
+    available: true,
+    url: 'https://azure.microsoft.com',
   },
   {
     id: 'e2b',
@@ -228,6 +257,21 @@ export default function SelectVMPage() {
   const [e2bError, setE2bError] = useState<string | null>(null)
   const [e2bVMName, setE2bVMName] = useState('')
 
+  // Azure configuration modal state
+  const [showAzureModal, setShowAzureModal] = useState(false)
+  const [azureTenantId, setAzureTenantId] = useState('')
+  const [azureClientId, setAzureClientId] = useState('')
+  const [azureClientSecret, setAzureClientSecret] = useState('')
+  const [azureSubscriptionId, setAzureSubscriptionId] = useState('')
+  const [azureRegion, setAzureRegion] = useState('eastus')
+  const [azureVmSize, setAzureVmSize] = useState('Standard_B2s')
+  const [isValidatingAzure, setIsValidatingAzure] = useState(false)
+  const [azureKeyValidated, setAzureKeyValidated] = useState(false)
+  const [azureRegions, setAzureRegions] = useState<AzureRegion[]>([])
+  const [azureVmSizes, setAzureVmSizes] = useState<AzureVMSize[]>([])
+  const [azureError, setAzureError] = useState<string | null>(null)
+  const [azureVMName, setAzureVMName] = useState('')
+
   // Load user's VMs and credentials
   useEffect(() => {
     if (session?.user?.id) {
@@ -316,6 +360,20 @@ export default function SelectVMPage() {
       } else {
         setShowE2BModal(true)
       }
+    } else if (provider === 'azure') {
+      setAzureVMName(`Azure VM ${userVMs.filter(vm => vm.provider === 'azure').length + 1}`)
+      setAzureError(null)
+
+      // If we already have Azure credentials stored, skip to configuration
+      if (credentials?.hasAzureCredentials) {
+        setShowAzureModal(true)
+        setAzureKeyValidated(true)
+        setAzureRegion(credentials.azureRegion || 'eastus')
+        // Fetch Azure data with stored credentials
+        await fetchAzureData()
+      } else {
+        setShowAzureModal(true)
+      }
     }
   }
 
@@ -364,6 +422,22 @@ export default function SelectVMPage() {
       if (res.ok) {
         setE2bTemplates(data.templates || [])
         setE2bTimeoutOptions(data.timeoutOptions || [])
+      }
+    } catch (e) {
+    }
+  }
+
+  const fetchAzureData = async () => {
+    try {
+      const res = await fetch('/api/setup/azure/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ useStored: true }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setAzureRegions(data.regions || [])
+        setAzureVmSizes(data.vmSizes || [])
       }
     } catch (e) {
     }
@@ -731,6 +805,116 @@ export default function SelectVMPage() {
     setE2bVMName('')
   }
 
+  // Azure handlers
+  const handleValidateAzure = async () => {
+    if (!azureTenantId.trim() || !azureClientId.trim() || !azureClientSecret.trim() || !azureSubscriptionId.trim()) {
+      setAzureError('Please enter all Azure credentials')
+      return
+    }
+
+    setIsValidatingAzure(true)
+    setAzureError(null)
+
+    try {
+      const res = await fetch('/api/setup/azure/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId: azureTenantId.trim(),
+          clientId: azureClientId.trim(),
+          clientSecret: azureClientSecret.trim(),
+          subscriptionId: azureSubscriptionId.trim(),
+          region: azureRegion,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to validate Azure credentials')
+      }
+
+      setAzureKeyValidated(true)
+      setAzureRegions(data.regions || [])
+      setAzureVmSizes(data.vmSizes || [])
+    } catch (e) {
+      setAzureError(e instanceof Error ? e.message : 'Failed to validate Azure credentials')
+    } finally {
+      setIsValidatingAzure(false)
+    }
+  }
+
+  const handleAzureConfirm = async () => {
+    if (!azureKeyValidated) {
+      setAzureError('Please validate your Azure credentials first')
+      return
+    }
+
+    if (!azureVMName.trim()) {
+      setAzureError('Please enter a name for your VM')
+      return
+    }
+
+    setIsSubmitting(true)
+    setError(null)
+
+    try {
+      // Save Azure configuration if new credentials were entered
+      if (azureTenantId && azureClientId && azureClientSecret && azureSubscriptionId) {
+        await fetch('/api/setup/azure/configure', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            region: azureRegion,
+            vmSize: azureVmSize,
+          }),
+        })
+      }
+
+      // Create the VM
+      const res = await fetch('/api/vms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: azureVMName.trim(),
+          provider: 'azure',
+          azureVmSize,
+          azureRegion,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to create VM')
+      }
+
+      const data = await res.json()
+
+      closeAzureModal()
+
+      // Redirect to learning-sources page for this VM
+      router.push(`/learning-sources?vmId=${data.vm.id}`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong')
+      setIsSubmitting(false)
+    }
+  }
+
+  const closeAzureModal = () => {
+    setShowAzureModal(false)
+    setAzureTenantId('')
+    setAzureClientId('')
+    setAzureClientSecret('')
+    setAzureSubscriptionId('')
+    setAzureRegion('eastus')
+    setAzureVmSize('Standard_B2s')
+    setAzureKeyValidated(false)
+    setAzureRegions([])
+    setAzureVmSizes([])
+    setAzureError(null)
+    setAzureVMName('')
+  }
+
   const handleDeleteVM = async (vmId: string) => {
     if (!confirm('Are you sure you want to delete this VM?')) {
       return
@@ -781,6 +965,8 @@ export default function SelectVMPage() {
         return <img src="/logos/orgo.png" alt="Orgo" className="w-8 h-8 object-contain" />
       case 'aws':
         return <img src="/logos/aws.png" alt="AWS" className="w-8 h-8 object-contain" />
+      case 'azure':
+        return <img src="/logos/azure.svg" alt="Azure" className="w-8 h-8 object-contain" />
       case 'e2b':
         return <img src="/logos/e2b.png" alt="E2B" className="w-8 h-8 object-contain" />
       default:
@@ -914,6 +1100,7 @@ export default function SelectVMPage() {
                       </span>
                       <span className="text-xs text-sam-text-dim">
                         {vm.provider === 'aws' && vm.awsInstanceType}
+                        {vm.provider === 'azure' && vm.azureVmSize}
                         {vm.provider === 'orgo' && vm.orgoProjectName}
                         {vm.provider === 'e2b' && 'E2B Sandbox'}
                       </span>
@@ -922,6 +1109,11 @@ export default function SelectVMPage() {
                       {vm.provider === 'aws' && vm.awsPublicIp && (
                         <p className="text-xs text-sam-text-dim mb-3 font-mono">
                           IP: {vm.awsPublicIp}
+                        </p>
+                      )}
+                      {vm.provider === 'azure' && vm.azurePublicIp && (
+                        <p className="text-xs text-sam-text-dim mb-3 font-mono">
+                          IP: {vm.azurePublicIp}
                         </p>
                       )}
                       {vm.provider === 'orgo' && vm.orgoComputerId && (
@@ -1018,6 +1210,7 @@ export default function SelectVMPage() {
                   {option.available && (
                     (option.id === 'orgo' && credentials?.hasOrgoApiKey) ||
                     (option.id === 'aws' && credentials?.hasAwsCredentials) ||
+                    (option.id === 'azure' && credentials?.hasAzureCredentials) ||
                     (option.id === 'e2b' && credentials?.hasE2bApiKey)
                   ) && (
                       <div className="absolute top-3 right-3">
@@ -1951,6 +2144,327 @@ export default function SelectVMPage() {
                   ) : (
                     <>
                       Add Sandbox
+                      <Plus className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Azure Configuration Modal */}
+      <AnimatePresence>
+        {showAzureModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={closeAzureModal}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.2 }}
+              className="bg-sam-surface border border-sam-border rounded-2xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-sam-border sticky top-0 bg-sam-surface z-10">
+                <div className="flex items-center gap-3">
+                  <img src="/logos/azure.svg" alt="Azure" className="w-8 h-8 object-contain" />
+                  <div>
+                    <h2 className="text-xl font-display font-semibold text-sam-text">
+                      {credentials?.hasAzureCredentials ? 'Add Azure VM' : 'Configure Azure'}
+                    </h2>
+                  </div>
+                </div>
+                <button
+                  onClick={closeAzureModal}
+                  className="p-2 rounded-lg hover:bg-sam-bg transition-colors text-sam-text-dim hover:text-sam-text"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 space-y-6">
+                {/* Error Display */}
+                {azureError && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="p-3 rounded-lg bg-sam-error/10 border border-sam-error/30 flex items-start gap-2"
+                  >
+                    <AlertCircle className="w-4 h-4 text-sam-error flex-shrink-0 mt-0.5" />
+                    <p className="text-sam-error text-sm">{azureError}</p>
+                  </motion.div>
+                )}
+
+                {/* VM Name */}
+                <div className="space-y-3">
+                  <label className="text-sm font-medium text-sam-text flex items-center gap-2">
+                    <Server className="w-4 h-4 text-sam-accent" />
+                    VM Name
+                    <span className="text-sam-error">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={azureVMName}
+                    onChange={(e) => setAzureVMName(e.target.value)}
+                    placeholder="e.g., My Azure VM"
+                    className="w-full px-4 py-2.5 rounded-lg bg-sam-bg border border-sam-border focus:border-sam-accent focus:ring-1 focus:ring-sam-accent/30 transition-all text-sam-text placeholder:text-sam-text-dim/50 text-sm"
+                  />
+                </div>
+
+                {/* Azure Credentials - only show if not already configured */}
+                {!credentials?.hasAzureCredentials && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-sam-text flex items-center gap-2">
+                        <Key className="w-4 h-4 text-sam-accent" />
+                        Azure Service Principal
+                        <span className="text-sam-error">*</span>
+                      </label>
+                      <a
+                        href="https://learn.microsoft.com/en-us/azure/developer/python/sdk/authentication-local-development-service-principal"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-sam-accent hover:text-sam-accent/80 flex items-center gap-1"
+                      >
+                        Create service principal <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        value={azureTenantId}
+                        onChange={(e) => {
+                          setAzureTenantId(e.target.value)
+                          setAzureKeyValidated(false)
+                        }}
+                        placeholder="Tenant ID (Directory ID)"
+                        disabled={azureKeyValidated}
+                        className={`w-full px-4 py-2.5 rounded-lg bg-sam-bg border transition-all text-sam-text placeholder:text-sam-text-dim/50 font-mono text-sm ${azureKeyValidated
+                            ? 'border-green-500/50 bg-green-500/5'
+                            : 'border-sam-border focus:border-sam-accent focus:ring-1 focus:ring-sam-accent/30'
+                          }`}
+                      />
+                      <input
+                        type="text"
+                        value={azureClientId}
+                        onChange={(e) => {
+                          setAzureClientId(e.target.value)
+                          setAzureKeyValidated(false)
+                        }}
+                        placeholder="Client ID (Application ID)"
+                        disabled={azureKeyValidated}
+                        className={`w-full px-4 py-2.5 rounded-lg bg-sam-bg border transition-all text-sam-text placeholder:text-sam-text-dim/50 font-mono text-sm ${azureKeyValidated
+                            ? 'border-green-500/50 bg-green-500/5'
+                            : 'border-sam-border focus:border-sam-accent focus:ring-1 focus:ring-sam-accent/30'
+                          }`}
+                      />
+                      <input
+                        type="password"
+                        value={azureClientSecret}
+                        onChange={(e) => {
+                          setAzureClientSecret(e.target.value)
+                          setAzureKeyValidated(false)
+                        }}
+                        placeholder="Client Secret"
+                        disabled={azureKeyValidated}
+                        className={`w-full px-4 py-2.5 rounded-lg bg-sam-bg border transition-all text-sam-text placeholder:text-sam-text-dim/50 font-mono text-sm ${azureKeyValidated
+                            ? 'border-green-500/50 bg-green-500/5'
+                            : 'border-sam-border focus:border-sam-accent focus:ring-1 focus:ring-sam-accent/30'
+                          }`}
+                      />
+                      <input
+                        type="text"
+                        value={azureSubscriptionId}
+                        onChange={(e) => {
+                          setAzureSubscriptionId(e.target.value)
+                          setAzureKeyValidated(false)
+                        }}
+                        placeholder="Subscription ID"
+                        disabled={azureKeyValidated}
+                        className={`w-full px-4 py-2.5 rounded-lg bg-sam-bg border transition-all text-sam-text placeholder:text-sam-text-dim/50 font-mono text-sm ${azureKeyValidated
+                            ? 'border-green-500/50 bg-green-500/5'
+                            : 'border-sam-border focus:border-sam-accent focus:ring-1 focus:ring-sam-accent/30'
+                          }`}
+                      />
+                    </div>
+
+                    <div className="flex gap-2">
+                      {!azureKeyValidated ? (
+                        <button
+                          onClick={handleValidateAzure}
+                          disabled={isValidatingAzure || !azureTenantId.trim() || !azureClientId.trim() || !azureClientSecret.trim() || !azureSubscriptionId.trim()}
+                          className="flex-1 px-4 py-2.5 rounded-lg bg-sam-accent text-sam-bg font-medium text-sm hover:bg-sam-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {isValidatingAzure ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Validating...
+                            </>
+                          ) : (
+                            'Validate Credentials'
+                          )}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setAzureKeyValidated(false)
+                            setAzureTenantId('')
+                            setAzureClientId('')
+                            setAzureClientSecret('')
+                            setAzureSubscriptionId('')
+                          }}
+                          className="flex-1 px-4 py-2.5 rounded-lg border border-sam-border text-sam-text-dim hover:text-sam-text hover:border-sam-accent/50 font-medium text-sm transition-colors flex items-center justify-center gap-2"
+                        >
+                          Change Credentials
+                        </button>
+                      )}
+                    </div>
+
+                    {azureKeyValidated && (
+                      <p className="text-xs text-green-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Azure credentials validated successfully
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Already configured notice */}
+                {credentials?.hasAzureCredentials && (
+                  <div className="p-3 rounded-lg bg-green-500/5 border border-green-500/20">
+                    <p className="text-sm text-green-400 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Using your saved Azure credentials
+                    </p>
+                  </div>
+                )}
+
+                {/* Region & VM Size Selection */}
+                {azureKeyValidated && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="space-y-4"
+                  >
+                    {/* Region Selection */}
+                    <div className="space-y-3">
+                      <label className="text-sm font-medium text-sam-text flex items-center gap-2">
+                        <Globe className="w-4 h-4 text-sam-accent" />
+                        Region
+                      </label>
+                      <select
+                        value={azureRegion}
+                        onChange={(e) => setAzureRegion(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-lg bg-sam-bg border border-sam-border focus:border-sam-accent focus:ring-1 focus:ring-sam-accent/30 transition-all text-sam-text text-sm"
+                      >
+                        {(azureRegions.length > 0 ? azureRegions : [
+                          { id: 'eastus', name: 'East US' },
+                          { id: 'eastus2', name: 'East US 2' },
+                          { id: 'westus', name: 'West US' },
+                          { id: 'westus2', name: 'West US 2' },
+                          { id: 'westeurope', name: 'West Europe' },
+                          { id: 'northeurope', name: 'North Europe' },
+                          { id: 'southeastasia', name: 'Southeast Asia' },
+                          { id: 'australiaeast', name: 'Australia East' },
+                        ]).map((region) => (
+                          <option key={region.id} value={region.id}>
+                            {region.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* VM Size Selection */}
+                    <div className="space-y-3">
+                      <label className="text-sm font-medium text-sam-text flex items-center gap-2">
+                        <Server className="w-4 h-4 text-sam-accent" />
+                        VM Size
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {(azureVmSizes.length > 0 ? azureVmSizes : [
+                          { id: 'Standard_B1s', name: 'Standard_B1s', vcpu: 1, memory: '1 GB', priceHour: '~$0.01/hr' },
+                          { id: 'Standard_B1ms', name: 'Standard_B1ms', vcpu: 1, memory: '2 GB', priceHour: '~$0.02/hr' },
+                          { id: 'Standard_B2s', name: 'Standard_B2s', vcpu: 2, memory: '4 GB', priceHour: '~$0.04/hr', recommended: true },
+                          { id: 'Standard_B2ms', name: 'Standard_B2ms', vcpu: 2, memory: '8 GB', priceHour: '~$0.08/hr' },
+                          { id: 'Standard_D2s_v5', name: 'Standard_D2s_v5', vcpu: 2, memory: '8 GB', priceHour: '~$0.10/hr' },
+                          { id: 'Standard_D4s_v5', name: 'Standard_D4s_v5', vcpu: 4, memory: '16 GB', priceHour: '~$0.19/hr' },
+                        ]).map((size) => (
+                          <button
+                            key={size.id}
+                            onClick={() => setAzureVmSize(size.id)}
+                            className={`p-3 rounded-lg border text-left transition-all ${azureVmSize === size.id
+                                ? 'border-sam-accent bg-sam-accent/10'
+                                : 'border-sam-border hover:border-sam-accent/50 hover:bg-sam-bg'
+                              }`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sam-text font-mono text-sm">{size.name}</span>
+                              {size.recommended && (
+                                <span className="text-[10px] font-mono text-sam-accent bg-sam-accent/10 px-1.5 py-0.5 rounded">
+                                  Recommended
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-sam-text-dim">
+                              {size.vcpu} vCPU · {size.memory}
+                            </div>
+                            <div className="text-xs mt-1 text-sam-accent">
+                              {size.priceHour}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Permissions Notice */}
+                    <div className="p-3 rounded-lg bg-sam-bg border border-sam-border">
+                      <p className="text-xs text-sam-text-dim">
+                        <strong className="text-sam-text">Required permissions:</strong> The service principal needs
+                        Contributor role on the subscription to create VMs, networking, and storage resources.
+                        <a
+                          href="https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sam-accent hover:underline ml-1"
+                        >
+                          Learn more
+                        </a>
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-6 border-t border-sam-border flex justify-end gap-3 sticky bottom-0 bg-sam-surface">
+                <button
+                  onClick={closeAzureModal}
+                  className="px-5 py-2.5 rounded-lg border border-sam-border text-sam-text-dim hover:text-sam-text hover:border-sam-accent/50 font-medium text-sm transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAzureConfirm}
+                  disabled={!azureKeyValidated || isSubmitting || !azureVMName.trim()}
+                  className="px-5 py-2.5 rounded-lg bg-sam-accent text-sam-bg font-medium text-sm hover:bg-sam-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Adding VM...
+                    </>
+                  ) : (
+                    <>
+                      Add VM
                       <Plus className="w-4 h-4" />
                     </>
                   )}
