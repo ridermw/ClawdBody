@@ -7,7 +7,7 @@ ClawdBody is a 1-click deployment platform for ClawdBot that runs 24/7 on cloud 
 ## Features
 
 - 🚀 **1-Click Deployment** - Deploy ClawdBot to cloud VMs in minutes
-- ☁️ **Multi-Provider Support** - Works with Orgo, AWS, E2B, and more
+- ☁️ **Multi-Provider Support** - Works with Orgo, AWS, Azure, E2B, and more
 - 📧 **Email Integration** - ClawdBot can send and reply to emails via Gmail
 - 📅 **Calendar Management** - Create, update, and delete calendar events
 - 🖥️ **Web Terminal** - Built-in terminal for real-time interaction
@@ -19,7 +19,7 @@ ClawdBody is a 1-click deployment platform for ClawdBot that runs 24/7 on cloud 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                       Cloud VM (Orgo/AWS/E2B)                    │
+│                   Cloud VM (Orgo/AWS/Azure/E2B)                  │
 │                                                                  │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │                     ClawdBot                              │   │
@@ -42,7 +42,7 @@ ClawdBody is a 1-click deployment platform for ClawdBot that runs 24/7 on cloud 
 |-----------|------|------------|
 | **ClawdBody** | Deployment & management platform | Next.js, Prisma, PostgreSQL |
 | **ClawdBot** | Autonomous AI agent | Claude API, Python |
-| **VM** | Execution environment | Orgo/AWS/E2B cloud VMs |
+| **VM** | Execution environment | Orgo/AWS/Azure/E2B cloud VMs |
 | **Integrations** | Communication & automation | Gmail API, Google Calendar API |
 | **Web Terminal** | Real-time interaction | WebSockets, xterm.js |
 
@@ -53,7 +53,11 @@ ClawdBody is a 1-click deployment platform for ClawdBot that runs 24/7 on cloud 
 - Node.js 18+
 - GitHub account
 - [Claude API key](https://console.anthropic.com/settings/keys)
-- [Orgo API key](https://orgo.ai/workspaces)
+- One of the following VM providers:
+  - [Orgo API key](https://orgo.ai/workspaces)
+  - [AWS credentials](https://console.aws.amazon.com/iam/home#/security_credentials) (Access Key ID + Secret)
+  - [Azure Service Principal](https://learn.microsoft.com/en-us/azure/developer/python/sdk/authentication-local-development-service-principal) (Tenant ID, Client ID, Client Secret, Subscription ID)
+  - [E2B API key](https://e2b.dev/dashboard)
 
 ### 1. Clone and Install
 
@@ -78,8 +82,26 @@ GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/callback/google
 NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=your_secret_here  # Generate with: openssl rand -base64 32
 
-# Orgo API Key (optional, if using Orgo as VM provider)
+# VM Provider Credentials (configure at least one)
+
+# Orgo API Key
 ORGO_API_KEY=sk_live_your_orgo_api_key
+
+# AWS Credentials
+AWS_ACCESS_KEY_ID=your_aws_access_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret_key
+AWS_REGION=us-east-1
+
+# Azure Service Principal
+# Create with: az ad sp create-for-rbac --name "ClawdBody" --role contributor
+AZURE_TENANT_ID=your_azure_tenant_id
+AZURE_CLIENT_ID=your_azure_client_id
+AZURE_CLIENT_SECRET=your_azure_client_secret
+AZURE_SUBSCRIPTION_ID=your_azure_subscription_id
+AZURE_REGION=eastus
+
+# E2B API Key
+E2B_API_KEY=your_e2b_api_key
 
 # Database (PostgreSQL)
 # For local dev, use Docker: docker run -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres
@@ -120,7 +142,7 @@ Visit `http://localhost:3000` and sign in with Google.
 ## What Happens During Setup
 
 1. **Google OAuth** - Sign in with your Google account
-2. **API Keys** - Enter your Claude API key and choose a VM provider (Orgo/AWS/E2B)
+2. **API Keys** - Enter your Claude API key and choose a VM provider (Orgo/AWS/Azure/E2B)
 3. **VM Provisioning** - Creates a VM with your selected provider
 4. **VM Configuration**:
    - Installs Python and essential tools
@@ -175,7 +197,7 @@ Once setup is complete, ClawdBot runs 24/7 on your VM, ready to execute tasks. Y
 
 ### Monitoring
 
-- **VM Console**: View at your VM provider's dashboard (Orgo/AWS/E2B)
+- **VM Console**: View at your VM provider's dashboard (Orgo/AWS/Azure Portal/E2B)
 - **Web Terminal**: Monitor ClawdBot activity through the built-in terminal
 - **Learning Sources**: Check integration status and manage connections
 
@@ -265,7 +287,36 @@ See `CLAWDBOT_COMMUNICATION.md` for detailed documentation on:
 ### VM Provider APIs
 - **Orgo**: [Documentation](https://docs.orgo.ai)
 - **AWS**: EC2 and SSM for VM management
+- **Azure**: [Azure SDK for JavaScript](https://learn.microsoft.com/en-us/azure/developer/javascript/) - Uses @azure/arm-compute, @azure/arm-network, @azure/identity
 - **E2B**: [Documentation](https://e2b.dev/docs)
+
+### Azure VM Sizes
+
+| Size | vCPU | Memory | Price/Hour |
+|------|------|--------|------------|
+| Standard_B1s | 1 | 1 GB | ~$0.01 |
+| Standard_B1ms | 1 | 2 GB | ~$0.02 |
+| Standard_B2s (Recommended) | 2 | 4 GB | ~$0.04 |
+| Standard_B2ms | 2 | 8 GB | ~$0.08 |
+| Standard_D2s_v5 | 2 | 8 GB | ~$0.10 |
+| Standard_D4s_v5 | 4 | 16 GB | ~$0.19 |
+
+### Azure Setup
+
+1. **Create a Service Principal**:
+   ```bash
+   az ad sp create-for-rbac --name "ClawdBody" --role contributor --scopes /subscriptions/{subscription-id}
+   ```
+
+2. **Copy the output values** to your environment variables:
+   - `appId` → `AZURE_CLIENT_ID`
+   - `password` → `AZURE_CLIENT_SECRET`
+   - `tenant` → `AZURE_TENANT_ID`
+
+3. **Get your Subscription ID**:
+   ```bash
+   az account show --query id -o tsv
+   ```
 
 ## Contributing
 
