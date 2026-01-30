@@ -5,9 +5,11 @@ import { prisma } from '@/lib/prisma'
 import { OrgoClient, generateComputerName } from '@/lib/orgo'
 import { AWSClient, generateInstanceName } from '@/lib/aws'
 import { E2BClient, generateSandboxName } from '@/lib/e2b'
+import { AzureClient } from '@/lib/azure'
 import { VMSetup } from '@/lib/vm-setup'
 import { AWSVMSetup } from '@/lib/aws-vm-setup'
 import { E2BVMSetup } from '@/lib/e2b-vm-setup'
+import { AzureVMSetup } from '@/lib/azure-vm-setup'
 import { encrypt, decrypt } from '@/lib/encryption'
 // Import type from Prisma client for type checking
 import type { SetupState } from '@prisma/client'
@@ -70,6 +72,23 @@ export async function POST(request: NextRequest) {
       if (!e2bApiKey) {
         return NextResponse.json({
           error: 'E2B API key not configured. Please go back and configure your E2B API key.'
+        }, { status: 400 })
+      }
+    } else if (vmProvider === 'azure') {
+      // Type assertion to access Azure fields
+      const azureState = setupState as SetupState & {
+        azureTenantId?: string
+        azureClientId?: string
+        azureClientSecret?: string
+        azureSubscriptionId?: string
+      }
+      const azureTenantId = azureState?.azureTenantId
+      const azureClientId = azureState?.azureClientId
+      const azureClientSecret = azureState?.azureClientSecret
+      const azureSubscriptionId = azureState?.azureSubscriptionId
+      if (!azureTenantId || !azureClientId || !azureClientSecret || !azureSubscriptionId) {
+        return NextResponse.json({
+          error: 'Azure credentials not configured. Please go back and configure your Azure credentials.'
         }, { status: 400 })
       }
     } else {
@@ -151,6 +170,34 @@ export async function POST(request: NextRequest) {
         decryptedE2bApiKey,
         vm?.e2bTemplateId || 'base',
         vm?.e2bTimeout || 3600,
+        telegramBotToken,
+        telegramUserId,
+        vmId // Pass vmId
+      ).catch(() => { })
+    } else if (vmProvider === 'azure') {
+      // Type assertion to access Azure fields
+      const azureState = setupState as SetupState & {
+        azureTenantId?: string
+        azureClientId?: string
+        azureClientSecret?: string
+        azureSubscriptionId?: string
+        azureRegion?: string
+        azureVmSize?: string
+      }
+      // Decrypt stored Azure credentials
+      const decryptedTenantId = decrypt(azureState.azureTenantId!)
+      const decryptedClientId = decrypt(azureState.azureClientId!)
+      const decryptedClientSecret = decrypt(azureState.azureClientSecret!)
+      const decryptedSubscriptionId = decrypt(azureState.azureSubscriptionId!)
+      runAzureSetupProcess(
+        session.user.id,
+        claudeApiKey,
+        decryptedTenantId,
+        decryptedClientId,
+        decryptedClientSecret,
+        decryptedSubscriptionId,
+        vm?.azureRegion || azureState.azureRegion || 'eastus',
+        vm?.azureVmSize || azureState.azureVmSize || 'Standard_B2s',
         telegramBotToken,
         telegramUserId,
         vmId // Pass vmId
@@ -613,6 +660,180 @@ async function runAWSSetupProcess(
     // Cleanup SSH connection
     if (awsVMSetup) {
       awsVMSetup.cleanup()
+    }
+  }
+}
+
+/**
+ * Azure VM Setup Process
+ */
+async function runAzureSetupProcess(
+  userId: string,
+  claudeApiKey: string,
+  azureTenantId: string,
+  azureClientId: string,
+  azureClientSecret: string,
+  azureSubscriptionId: string,
+  azureRegion: string,
+  azureVmSize: string,
+  telegramBotToken?: string,
+  telegramUserId?: string,
+  vmId?: string
+) {
+  const updateStatus = async (updates: Partial<{
+    status: string
+    vmCreated: boolean
+    clawdbotInstalled: boolean
+    telegramConfigured: boolean
+    gatewayStarted: boolean
+    azureVmId: string
+    azureVmName: string
+    azureResourceGroup: string
+    azurePublicIp: string
+    azurePrivateKey: string
+    azureAdminPassword: string
+    vmStatus: string
+    errorMessage: string
+  }>) => {
+    // Update SetupState with only fields that exist in the model
+    const setupStateUpdates: Record<string, unknown> = {}
+    if (updates.status !== undefined) setupStateUpdates.status = updates.status
+    if (updates.vmCreated !== undefined) setupStateUpdates.vmCreated = updates.vmCreated
+    if (updates.clawdbotInstalled !== undefined) setupStateUpdates.clawdbotInstalled = updates.clawdbotInstalled
+    if (updates.telegramConfigured !== undefined) setupStateUpdates.telegramConfigured = updates.telegramConfigured
+    if (updates.gatewayStarted !== undefined) setupStateUpdates.gatewayStarted = updates.gatewayStarted
+    if (updates.errorMessage !== undefined) setupStateUpdates.errorMessage = updates.errorMessage
+    if (updates.vmStatus !== undefined) setupStateUpdates.vmStatus = updates.vmStatus
+
+    if (Object.keys(setupStateUpdates).length > 0) {
+      await prisma.setupState.update({
+        where: { userId },
+        data: setupStateUpdates,
+      })
+    }
+
+    // Update VM model with Azure-specific fields if vmId is provided
+    if (vmId) {
+      const vmUpdates: Record<string, unknown> = {}
+      if (updates.status !== undefined) vmUpdates.status = updates.status
+      if (updates.vmCreated !== undefined) vmUpdates.vmCreated = updates.vmCreated
+      if (updates.clawdbotInstalled !== undefined) vmUpdates.clawdbotInstalled = updates.clawdbotInstalled
+      if (updates.telegramConfigured !== undefined) vmUpdates.telegramConfigured = updates.telegramConfigured
+      if (updates.gatewayStarted !== undefined) vmUpdates.gatewayStarted = updates.gatewayStarted
+      if (updates.azureVmId !== undefined) vmUpdates.azureVmId = updates.azureVmId
+      if (updates.azureVmName !== undefined) vmUpdates.azureVmName = updates.azureVmName
+      if (updates.azureResourceGroup !== undefined) vmUpdates.azureResourceGroup = updates.azureResourceGroup
+      if (updates.azurePublicIp !== undefined) vmUpdates.azurePublicIp = updates.azurePublicIp
+      if (updates.azurePrivateKey !== undefined) vmUpdates.azurePrivateKey = updates.azurePrivateKey
+      if (updates.azureAdminPassword !== undefined) vmUpdates.azureAdminPassword = updates.azureAdminPassword
+      if (updates.errorMessage !== undefined) vmUpdates.errorMessage = updates.errorMessage
+
+      if (Object.keys(vmUpdates).length > 0) {
+        await prisma.vM.update({
+          where: { id: vmId },
+          data: vmUpdates,
+        })
+      }
+    }
+  }
+
+  let azureVMSetup: AzureVMSetup | null = null
+
+  try {
+    const azureClient = new AzureClient({
+      tenantId: azureTenantId,
+      clientId: azureClientId,
+      clientSecret: azureClientSecret,
+      subscriptionId: azureSubscriptionId,
+      region: azureRegion,
+    })
+
+    // 1. Create Azure VM
+    await updateStatus({ status: 'provisioning', vmStatus: 'creating' })
+
+    const vmName = `Azure-VM-${Date.now()}`
+    const { instance, privateKey, adminPassword } = await azureClient.createInstance({
+      name: vmName,
+      vmSize: azureVmSize,
+      region: azureRegion,
+    })
+
+    await updateStatus({
+      azureVmId: instance.id,
+      azureVmName: instance.name,
+      azureResourceGroup: instance.resourceGroup!,
+      azurePublicIp: instance.publicIp!,
+      azurePrivateKey: encrypt(privateKey),
+      azureAdminPassword: encrypt(adminPassword),
+      vmStatus: 'starting',
+    })
+
+    // Wait for VM to be fully ready
+    await new Promise(resolve => setTimeout(resolve, 60000)) // Wait 60 seconds for VM to fully boot
+
+    await updateStatus({
+      vmCreated: true,
+      vmStatus: 'running',
+    })
+
+    // 2. Configure VM
+    await updateStatus({ status: 'configuring_vm' })
+
+    azureVMSetup = new AzureVMSetup(
+      azureClient,
+      instance.resourceGroup!,
+      instance.name,
+      privateKey,
+      instance.publicIp,
+      () => {
+        // Progress callback
+      }
+    )
+
+    // Install Python and essential tools
+    const pythonSuccess = await azureVMSetup.installPython()
+    if (!pythonSuccess) {
+      throw new Error('Failed to install Python and essential tools on VM')
+    }
+
+    // Install Anthropic SDKs
+    await azureVMSetup.installAnthropicSDK()
+
+    // Install Clawdbot
+    await azureVMSetup.installClawdbot()
+    await updateStatus({ clawdbotInstalled: true })
+
+    // 3. Configure Telegram (if provided)
+    if (telegramBotToken && telegramUserId) {
+      const telegramSuccess = await azureVMSetup.configureTelegram({
+        telegramBotToken,
+        telegramUserId,
+        userId,
+        apiBaseUrl: process.env.NEXTAUTH_URL || 'http://localhost:3000',
+      })
+      await updateStatus({ telegramConfigured: telegramSuccess })
+
+      if (telegramSuccess) {
+        const gatewaySuccess = await azureVMSetup.startClawdbotGateway(claudeApiKey, telegramBotToken)
+        await updateStatus({ gatewayStarted: gatewaySuccess })
+      }
+    } else {
+      // Just store Claude API key if no Telegram
+      await azureVMSetup.storeClaudeKey(claudeApiKey)
+    }
+
+    // Setup complete!
+    await updateStatus({ status: 'ready' })
+
+  } catch (error) {
+    await updateStatus({
+      status: 'failed',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error occurred',
+    })
+  } finally {
+    // Cleanup SSH connection
+    if (azureVMSetup) {
+      azureVMSetup.cleanup()
     }
   }
 }
